@@ -8,49 +8,86 @@ from .mcts_engine import mcts_search
 
 app = Flask(__name__)
 
-# ── Server state ──────────────────────────────────────────────
-_game_id: str = "twoinrow"
-_history: list[int] = []
+# ── Per-game server state ─────────────────────────────────────
+_sessions: dict[str, dict] = {}
 _num_simulations: int = 1000
 _c: float = 1.41
 
 
-def _rebuild_state() -> GameState:
-    cls = GAME_REGISTRY[_game_id]
+def _get_session(game_id: str) -> dict:
+    if game_id not in _sessions:
+        _sessions[game_id] = {"history": []}
+    return _sessions[game_id]
+
+
+def _rebuild_state(game_id: str) -> GameState:
+    cls = GAME_REGISTRY[game_id]
     state = cls()
-    for action in _history:
+    for action in _get_session(game_id)["history"]:
         state = state.apply(action)
     return state
 
 
-# ── API ───────────────────────────────────────────────────────
-@app.get("/api/state")
-def get_state():
-    state = _rebuild_state()
+# ── Landing page ──────────────────────────────────────────────
+@app.get("/")
+def landing():
+    items = "".join(
+        f'<a class="game-card" href="/{gid}/">'
+        f'<span class="game-name">{gid}</span></a>'
+        for gid in GAME_REGISTRY
+    )
+    return Response(f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>MCTS Visualizer</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;}}
+h1{{font-size:28px;margin-bottom:8px;}}
+.subtitle{{color:#64748b;margin-bottom:32px;font-size:14px;}}
+.games{{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:600px;}}
+.game-card{{padding:20px 32px;border:2px solid #334155;border-radius:12px;background:#1e293b;
+  text-decoration:none;color:#e2e8f0;font-weight:600;font-size:16px;transition:all .15s;}}
+.game-card:hover{{border-color:#3b82f6;background:#334155;}}
+</style></head><body>
+<h1>MCTS Visualizer</h1>
+<div class="subtitle">Choose a game</div>
+<div class="games">{items}</div>
+</body></html>""", content_type="text/html; charset=utf-8")
+
+
+# ── Per-game API ──────────────────────────────────────────────
+@app.get("/<game_id>/api/state")
+def get_state(game_id: str):
+    if game_id not in GAME_REGISTRY:
+        return jsonify({"error": "Unknown game"}), 404
+    session = _get_session(game_id)
+    state = _rebuild_state(game_id)
     root = mcts_search(state, _num_simulations, _c)
     return jsonify({
         "state": state.to_dict(),
         "tree": root.to_dict(_c),
-        "history": _history,
+        "history": session["history"],
     })
 
 
-@app.post("/api/move")
-def make_move():
-    global _history
+@app.post("/<game_id>/api/move")
+def make_move(game_id: str):
+    if game_id not in GAME_REGISTRY:
+        return jsonify({"error": "Unknown game"}), 404
+    session = _get_session(game_id)
     data = request.get_json(force=True)
     action = data["action"]
-    state = _rebuild_state()
+    state = _rebuild_state(game_id)
     if action not in state.legal_actions():
         return jsonify({"error": "Illegal action"}), 400
-    _history.append(action)
+    session["history"].append(action)
     state = state.apply(action)
 
     ai_action = None
     if not state.is_terminal():
         root = mcts_search(state, _num_simulations, _c)
         ai_action = max(root.children, key=lambda ch: ch.visits).action
-        _history.append(ai_action)
+        session["history"].append(ai_action)
         state = state.apply(ai_action)
 
     tree_data = None
@@ -60,42 +97,45 @@ def make_move():
     return jsonify({
         "state": state.to_dict(),
         "tree": tree_data,
-        "history": _history,
+        "history": session["history"],
         "ai_action": ai_action,
     })
 
 
-@app.post("/api/reset")
-def reset():
-    global _history
-    _history = []
-    state = _rebuild_state()
+@app.post("/<game_id>/api/reset")
+def reset(game_id: str):
+    if game_id not in GAME_REGISTRY:
+        return jsonify({"error": "Unknown game"}), 404
+    _sessions[game_id] = {"history": []}
+    state = _rebuild_state(game_id)
     root = mcts_search(state, _num_simulations, _c)
     return jsonify({
         "state": state.to_dict(),
         "tree": root.to_dict(_c),
-        "history": _history,
+        "history": [],
     })
 
 
-@app.post("/api/undo")
-def undo():
-    global _history
-    if _history:
-        _history.pop()
-    state = _rebuild_state()
+@app.post("/<game_id>/api/undo")
+def undo(game_id: str):
+    if game_id not in GAME_REGISTRY:
+        return jsonify({"error": "Unknown game"}), 404
+    session = _get_session(game_id)
+    if session["history"]:
+        session["history"].pop()
+    state = _rebuild_state(game_id)
     tree_data = None
     if not state.is_terminal():
         tree_data = mcts_search(state, _num_simulations, _c).to_dict(_c)
     return jsonify({
         "state": state.to_dict(),
         "tree": tree_data,
-        "history": _history,
+        "history": session["history"],
     })
 
 
-@app.post("/api/config")
-def config():
+@app.post("/<game_id>/api/config")
+def config(game_id: str):
     global _num_simulations, _c
     data = request.get_json(force=True)
     _num_simulations = data.get("num_simulations", _num_simulations)
@@ -103,10 +143,13 @@ def config():
     return jsonify({"num_simulations": _num_simulations, "c": _c})
 
 
-# ── Serve frontend ────────────────────────────────────────────
-@app.get("/")
-def index():
-    return Response(_INDEX_HTML, content_type="text/html; charset=utf-8")
+# ── Serve per-game frontend ──────────────────────────────────
+@app.get("/<game_id>/")
+def game_page(game_id: str):
+    if game_id not in GAME_REGISTRY:
+        return Response("Unknown game", status=404)
+    return Response(_INDEX_HTML.replace("__GAME_PREFIX__", f"/{game_id}"),
+                    content_type="text/html; charset=utf-8")
 
 
 _INDEX_HTML = r"""<!DOCTYPE html>
@@ -438,7 +481,7 @@ function rerenderTree(){if(currentTree) cv.innerHTML=renderTree(currentTree);}
 
 // ── API ──
 async function fetchState(){
-  const d=await(await fetch('/api/state')).json();
+  const d=await(await fetch('__GAME_PREFIX__/api/state')).json();
   currentState=d;currentTree=d.tree;
   renderBoard(d.state);updateStatus(d.state);
   expandedNodes.clear();expandedNodes.add('0');
@@ -446,7 +489,7 @@ async function fetchState(){
 }
 async function makeMove(a){
   document.getElementById('status').textContent='MCTS thinking...';
-  const d=await(await fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})).json();
+  const d=await(await fetch('__GAME_PREFIX__/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})).json();
   if(d.error){alert(d.error);return;}
   currentState=d;currentTree=d.tree;
   renderBoard(d.state);updateStatus(d.state);
@@ -454,21 +497,21 @@ async function makeMove(a){
   rerenderTree();
 }
 async function doReset(){
-  const d=await(await fetch('/api/reset',{method:'POST'})).json();
+  const d=await(await fetch('__GAME_PREFIX__/api/reset',{method:'POST'})).json();
   currentState=d;currentTree=d.tree;
   renderBoard(d.state);updateStatus(d.state);
   expandedNodes.clear();expandedNodes.add('0');
   rerenderTree();
 }
 async function doUndo(){
-  const d=await(await fetch('/api/undo',{method:'POST'})).json();
+  const d=await(await fetch('__GAME_PREFIX__/api/undo',{method:'POST'})).json();
   currentState=d;currentTree=d.tree;
   renderBoard(d.state);updateStatus(d.state);
   expandedNodes.clear();expandedNodes.add('0');
   rerenderTree();
 }
 async function updateConfig(){
-  await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+  await fetch('__GAME_PREFIX__/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({num_simulations:parseInt(document.getElementById('sims').value)||1000,
                          c:parseFloat(document.getElementById('cval').value)||1.41})});
 }
@@ -484,17 +527,14 @@ def main():
     parser = argparse.ArgumentParser(description="MCTS Visualizer Server")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--sims", type=int, default=1000)
-    parser.add_argument("--game", type=str, default="twoinrow",
-                        choices=list(GAME_REGISTRY.keys()))
     args = parser.parse_args()
 
-    global _num_simulations, _game_id
+    global _num_simulations
     _num_simulations = args.sims
-    _game_id = args.game
 
     print(f"MCTS Visualizer — http://localhost:{args.port}")
-    print(f"Game: {_game_id}, Simulations: {_num_simulations}")
-    app.run(host="0.0.0.0", port=args.port, debug=True)
+    print(f"Games: {', '.join(GAME_REGISTRY.keys())}")
+    app.run(host="0.0.0.0", port=args.port, debug=False)
 
 
 if __name__ == "__main__":
