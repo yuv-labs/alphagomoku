@@ -5,8 +5,8 @@ interface GameSetupProps {
 }
 
 export function GameSetup({ onCreate }: GameSetupProps) {
-  const [rows, setRows] = useState(15);
-  const [cols, setCols] = useState(15);
+  const [rows, setRows] = useState(9);
+  const [cols, setCols] = useState(9);
 
   return (
     <div className="game-setup">

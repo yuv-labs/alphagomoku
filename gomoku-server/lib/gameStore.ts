@@ -50,7 +50,7 @@ function toResponse(game: Game): GameResponse {
   };
 }
 
-export function createGame(rows = 19, cols = 19): GameResponse {
+export function createGame(rows = 9, cols = 9): GameResponse {
   const gameId = crypto.randomUUID().slice(0, 8);
   const board: (Color | null)[][] = Array.from({ length: rows }, () =>
     Array(cols).fill(null)
