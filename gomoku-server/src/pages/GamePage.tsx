@@ -110,12 +110,8 @@ export function GamePage() {
 
   if (loading) return <p style={{ textAlign: "center" }}>Loading...</p>;
   if (!game) {
-    return (
-      <div style={{ textAlign: "center", marginTop: 40 }}>
-        <p>Game <code>{gameId}</code> not found.</p>
-        <button onClick={() => navigate("/")} style={{ marginTop: 12 }}>Back to Home</button>
-      </div>
-    );
+    navigate("/", { replace: true });
+    return null;
   }
 
   return (
