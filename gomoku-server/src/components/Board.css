@@ -1,0 +1,59 @@
+.board-container {
+  position: relative;
+  display: inline-block;
+  align-self: center;
+  width: fit-content;
+}
+
+/* Grid lines */
+.board-grid {
+  display: grid;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.grid-cell {
+  width: 28px;
+  height: 28px;
+  border: 0.5px solid var(--border-active);
+  background: #1a1a28;
+}
+
+/* Stones overlay */
+.board-stones {
+  display: grid;
+  position: relative;
+}
+
+.stone-cell {
+  width: 28px;
+  height: 28px;
+  border: 0.5px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.stone-cell.black {
+  background: var(--text-bright);
+  border-radius: 50%;
+  cursor: default;
+}
+
+.stone-cell.white {
+  background: var(--text-dim);
+  border-radius: 50%;
+  border-color: var(--border);
+  cursor: default;
+}
+
+.stone-cell.last-move {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.stone-cell:not(.black):not(.white):hover {
+  background: var(--accent-glow);
+  border-radius: 50%;
+}
