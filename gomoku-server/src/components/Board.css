@@ -3,6 +3,7 @@
   display: inline-block;
   align-self: center;
   width: fit-content;
+  touch-action: manipulation;
 }
 
 /* Grid lines */
@@ -15,8 +16,6 @@
 }
 
 .grid-cell {
-  width: 28px;
-  height: 28px;
   border: 0.5px solid var(--border-active);
   background: #1a1a28;
 }
@@ -28,12 +27,11 @@
 }
 
 .stone-cell {
-  width: 28px;
-  height: 28px;
   border: 0.5px solid transparent;
   background: transparent;
   cursor: pointer;
   transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .stone-cell.black {
@@ -57,4 +55,10 @@
 .stone-cell:not(.black):not(.white):hover {
   background: var(--accent-glow);
   border-radius: 50%;
+}
+
+@media (max-width: 640px) {
+  .board-container {
+    align-self: center;
+  }
 }
