@@ -4,6 +4,12 @@
   padding: 40px 2rem;
 }
 
+@media (max-width: 640px) {
+  .app {
+    padding: 20px 12px;
+  }
+}
+
 .app-title-link {
   text-decoration: none;
 }
@@ -17,11 +23,18 @@
   letter-spacing: -0.03em;
 }
 
+@media (max-width: 640px) {
+  .app-title {
+    font-size: 1.4rem;
+    margin-bottom: 20px;
+  }
+}
+
 .app-title .accent {
   color: var(--accent);
 }
 
-/* Game layout: left column (board + panels), right column (activity log) */
+/* Game layout: left column (board + controls), right column (panels) */
 .game-layout {
   display: flex;
   gap: 24px;
@@ -44,6 +57,25 @@
   position: sticky;
   top: 20px;
   max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .game-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .game-left {
+    align-items: center;
+    width: 100%;
+  }
+
+  .game-right {
+    position: static;
+    max-height: none;
+    min-width: 0;
+  }
 }
 
 
@@ -125,6 +157,31 @@
 .controls-buttons button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .controls-info {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .controls-buttons {
+    justify-content: center;
+  }
+
+  .controls-buttons button {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
 }
 
 /* Activity Log */
@@ -274,6 +331,13 @@
 
 .create-btn:hover {
   opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+  .game-setup {
+    padding: 20px 16px;
+    max-width: 100%;
+  }
 }
 
 /* Home: Game List */
@@ -459,6 +523,22 @@
   color: var(--red);
 }
 
+@media (max-width: 640px) {
+  .webhook-form {
+    flex-wrap: wrap;
+  }
+
+  .webhook-url-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .webhook-color-select,
+  .webhook-add-btn {
+    flex: 1;
+  }
+}
+
 /* API Guide */
 .api-guide {
   background: var(--bg-card);
@@ -603,4 +683,26 @@
 .api-send-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .api-curl {
+    font-size: 11px;
+    padding: 8px;
+  }
+
+  .api-inputs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .api-actions {
+    flex-wrap: wrap;
+  }
+
+  .api-copy-btn,
+  .api-send-btn {
+    flex: 1;
+    text-align: center;
+  }
 }

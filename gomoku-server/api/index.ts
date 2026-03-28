@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   createGame,
   getGame,
-  getRawGame,
+  getWebhooks,
   listGames,
   placeMove,
   undoMove,
@@ -13,38 +13,38 @@ import {
 } from "../lib/gameStore.js";
 import { notifyWebhooks } from "../lib/webhook.js";
 
-type Handler = (req: VercelRequest, res: VercelResponse, params: string[]) => Promise<void> | void;
+type Handler = (req: VercelRequest, res: VercelResponse, params: string[]) => Promise<void>;
 
 const routes: [string, RegExp, Handler][] = [
-  ["GET", /^\/api\/games$/, (_req, res) => {
-    res.json(listGames());
+  ["GET", /^\/api\/games$/, async (_req, res) => {
+    res.json(await listGames());
   }],
 
-  ["POST", /^\/api\/games$/, (req, res) => {
+  ["POST", /^\/api\/games$/, async (req, res) => {
     const { rows, cols } = req.body ?? {};
-    res.status(201).json(createGame(rows, cols));
+    res.status(201).json(await createGame(rows, cols));
   }],
 
-  ["GET", /^\/api\/games\/([^/]+)$/, (_req, res, [id]) => {
-    const game = getGame(id);
-    if (!game) return res.status(404).json({ error: "Game not found" });
+  ["GET", /^\/api\/games\/([^/]+)$/, async (_req, res, [id]) => {
+    const game = await getGame(id);
+    if (!game) { res.status(404).json({ error: "Game not found" }); return; }
     res.json(game);
   }],
 
-  ["DELETE", /^\/api\/games\/([^/]+)$/, (_req, res, [id]) => {
-    if (!deleteGame(id)) return res.status(404).json({ error: "Game not found" });
+  ["DELETE", /^\/api\/games\/([^/]+)$/, async (_req, res, [id]) => {
+    if (!(await deleteGame(id))) { res.status(404).json({ error: "Game not found" }); return; }
     res.json({ success: true });
   }],
 
   ["POST", /^\/api\/games\/([^/]+)\/move$/, async (req, res, [id]) => {
     const { row, col } = req.body ?? {};
     if (typeof row !== "number" || typeof col !== "number") {
-      return res.status(400).json({ error: "row and col are required numbers" });
+      res.status(400).json({ error: "row and col are required numbers" }); return;
     }
     try {
-      const result = placeMove(id, row, col);
-      const game = getRawGame(id);
-      if (game) await notifyWebhooks(game, result, result.lastMove);
+      const result = await placeMove(id, row, col);
+      const webhooks = await getWebhooks(id);
+      if (webhooks.length) await notifyWebhooks(webhooks, result, result.lastMove);
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -53,35 +53,35 @@ const routes: [string, RegExp, Handler][] = [
 
   ["POST", /^\/api\/games\/([^/]+)\/undo$/, async (_req, res, [id]) => {
     try {
-      const result = undoMove(id);
-      const game = getRawGame(id);
-      if (game) await notifyWebhooks(game, result);
+      const result = await undoMove(id);
+      const webhooks = await getWebhooks(id);
+      if (webhooks.length) await notifyWebhooks(webhooks, result);
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
   }],
 
-  ["GET", /^\/api\/games\/([^/]+)\/webhooks$/, (_req, res, [id]) => {
-    const webhooks = listWebhooks(id);
-    if (!webhooks) return res.status(404).json({ error: "Game not found" });
+  ["GET", /^\/api\/games\/([^/]+)\/webhooks$/, async (_req, res, [id]) => {
+    const webhooks = await listWebhooks(id);
+    if (!webhooks) { res.status(404).json({ error: "Game not found" }); return; }
     res.json(webhooks);
   }],
 
-  ["POST", /^\/api\/games\/([^/]+)\/webhooks$/, (req, res, [id]) => {
+  ["POST", /^\/api\/games\/([^/]+)\/webhooks$/, async (req, res, [id]) => {
     const { url, color } = req.body ?? {};
     if (!url || !["b", "w"].includes(color)) {
-      return res.status(400).json({ error: "url and color ('b' or 'w') are required" });
+      res.status(400).json({ error: "url and color ('b' or 'w') are required" }); return;
     }
     try {
-      res.status(201).json(addWebhook(id, url, color));
+      res.status(201).json(await addWebhook(id, url, color));
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
   }],
 
-  ["DELETE", /^\/api\/games\/([^/]+)\/webhooks\/([^/]+)$/, (_req, res, [gameId, webhookId]) => {
-    if (!removeWebhook(gameId, webhookId)) return res.status(404).json({ error: "Webhook not found" });
+  ["DELETE", /^\/api\/games\/([^/]+)\/webhooks\/([^/]+)$/, async (_req, res, [gameId, webhookId]) => {
+    if (!(await removeWebhook(gameId, webhookId))) { res.status(404).json({ error: "Webhook not found" }); return; }
     res.json({ success: true });
   }],
 ];

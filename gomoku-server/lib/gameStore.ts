@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { sql } from "./db.js";
 
 export type Color = "b" | "w";
 
@@ -14,15 +15,6 @@ export interface Webhook {
   color: Color;
 }
 
-export interface Game {
-  gameId: string;
-  rows: number;
-  cols: number;
-  board: (Color | null)[][];
-  moves: Move[];
-  webhooks: Map<string, Webhook>;
-}
-
 export interface GameResponse {
   gameId: string;
   rows: number;
@@ -30,34 +22,6 @@ export interface GameResponse {
   board: (Color | null)[][];
   moves: Move[];
   nextColor: Color;
-}
-
-// In-memory store — resets on cold start
-const games = new Map<string, Game>();
-
-function nextColor(game: Game): Color {
-  return game.moves.length % 2 === 0 ? "b" : "w";
-}
-
-function toResponse(game: Game): GameResponse {
-  return {
-    gameId: game.gameId,
-    rows: game.rows,
-    cols: game.cols,
-    board: game.board,
-    moves: game.moves,
-    nextColor: nextColor(game),
-  };
-}
-
-export function createGame(rows = 9, cols = 9): GameResponse {
-  const gameId = crypto.randomUUID().slice(0, 8);
-  const board: (Color | null)[][] = Array.from({ length: rows }, () =>
-    Array(cols).fill(null)
-  );
-  const game: Game = { gameId, rows, cols, board, moves: [], webhooks: new Map() };
-  games.set(gameId, game);
-  return toResponse(game);
 }
 
 export interface GameSummary {
@@ -68,75 +32,190 @@ export interface GameSummary {
   nextColor: Color;
 }
 
-export function listGames(): GameSummary[] {
-  return Array.from(games.values()).map((g) => ({
-    gameId: g.gameId,
-    rows: g.rows,
-    cols: g.cols,
-    moveCount: g.moves.length,
-    nextColor: nextColor(g),
+function buildBoard(rows: number, cols: number, moves: Move[]): (Color | null)[][] {
+  const board: (Color | null)[][] = Array.from({ length: rows }, () =>
+    Array(cols).fill(null)
+  );
+  for (const m of moves) {
+    board[m.row][m.col] = m.color;
+  }
+  return board;
+}
+
+function deriveNextColor(moveCount: number): Color {
+  return moveCount % 2 === 0 ? "b" : "w";
+}
+
+function parseMoveRows(rows: Record<string, unknown>[]): Move[] {
+  return rows.map((r: any) => ({
+    row: r.row,
+    col: r.col,
+    color: r.color as Color,
   }));
 }
 
-export function getGame(gameId: string): GameResponse | null {
-  const game = games.get(gameId);
-  return game ? toResponse(game) : null;
+function parseWebhookRows(rows: Record<string, unknown>[]): Webhook[] {
+  return rows.map((r: any) => ({
+    webhookId: r.webhook_id,
+    url: r.url,
+    color: r.color as Color,
+  }));
 }
 
-export function getRawGame(gameId: string): Game | null {
-  return games.get(gameId) ?? null;
+async function fetchGame(gameId: string) {
+  const [game] = await sql`SELECT * FROM games WHERE game_id = ${gameId}`;
+  return game ?? null;
 }
 
-export function placeMove(gameId: string, row: number, col: number): GameResponse & { lastMove: Move } {
-  const game = games.get(gameId);
+async function fetchMoves(gameId: string): Promise<Move[]> {
+  const rows = await sql`
+    SELECT row, col, color FROM moves WHERE game_id = ${gameId} ORDER BY seq
+  `;
+  return parseMoveRows(rows);
+}
+
+export async function createGame(rows = 9, cols = 9): Promise<GameResponse> {
+  const gameId = crypto.randomUUID().slice(0, 8);
+  await sql`INSERT INTO games (game_id, rows, cols) VALUES (${gameId}, ${rows}, ${cols})`;
+  return {
+    gameId,
+    rows,
+    cols,
+    board: buildBoard(rows, cols, []),
+    moves: [],
+    nextColor: "b",
+  };
+}
+
+export async function listGames(): Promise<GameSummary[]> {
+  const results = await sql`
+    SELECT g.game_id, g.rows, g.cols, COUNT(m.id)::int AS move_count
+    FROM games g
+    LEFT JOIN moves m ON m.game_id = g.game_id
+    GROUP BY g.game_id
+    ORDER BY g.created_at DESC
+  `;
+  return results.map((r: any) => ({
+    gameId: r.game_id,
+    rows: r.rows,
+    cols: r.cols,
+    moveCount: r.move_count,
+    nextColor: deriveNextColor(r.move_count),
+  }));
+}
+
+export async function getGame(gameId: string): Promise<GameResponse | null> {
+  const game = await fetchGame(gameId);
+  if (!game) return null;
+
+  const moves = await fetchMoves(gameId);
+  return {
+    gameId,
+    rows: game.rows,
+    cols: game.cols,
+    board: buildBoard(game.rows, game.cols, moves),
+    moves,
+    nextColor: deriveNextColor(moves.length),
+  };
+}
+
+export async function placeMove(
+  gameId: string,
+  row: number,
+  col: number
+): Promise<GameResponse & { lastMove: Move }> {
+  const game = await fetchGame(gameId);
   if (!game) throw new Error("Game not found");
   if (row < 0 || row >= game.rows || col < 0 || col >= game.cols) {
     throw new Error("Position out of bounds");
   }
-  if (game.board[row][col] !== null) {
+
+  const moves = await fetchMoves(gameId);
+  const board = buildBoard(game.rows, game.cols, moves);
+  if (board[row][col] !== null) {
     throw new Error("Position already occupied");
   }
 
-  const color = nextColor(game);
-  game.board[row][col] = color;
-  const move: Move = { row, col, color };
-  game.moves.push(move);
+  const color = deriveNextColor(moves.length);
+  const seq = moves.length;
+  await sql`
+    INSERT INTO moves (game_id, seq, row, col, color)
+    VALUES (${gameId}, ${seq}, ${row}, ${col}, ${color})
+  `;
 
-  return { ...toResponse(game), lastMove: move };
+  const lastMove: Move = { row, col, color };
+  moves.push(lastMove);
+  board[row][col] = color;
+
+  return {
+    gameId,
+    rows: game.rows,
+    cols: game.cols,
+    board,
+    moves,
+    nextColor: deriveNextColor(moves.length),
+    lastMove,
+  };
 }
 
-export function undoMove(gameId: string): GameResponse {
-  const game = games.get(gameId);
+export async function undoMove(gameId: string): Promise<GameResponse> {
+  const game = await fetchGame(gameId);
   if (!game) throw new Error("Game not found");
-  if (game.moves.length === 0) throw new Error("No moves to undo");
 
-  const last = game.moves.pop()!;
-  game.board[last.row][last.col] = null;
+  const allMoves = await fetchMoves(gameId);
+  if (allMoves.length === 0) throw new Error("No moves to undo");
 
-  return toResponse(game);
+  const lastSeq = allMoves.length - 1;
+  await sql`DELETE FROM moves WHERE game_id = ${gameId} AND seq = ${lastSeq}`;
+
+  const moves = allMoves.slice(0, -1);
+  return {
+    gameId,
+    rows: game.rows,
+    cols: game.cols,
+    board: buildBoard(game.rows, game.cols, moves),
+    moves,
+    nextColor: deriveNextColor(moves.length),
+  };
 }
 
-export function listWebhooks(gameId: string): Webhook[] | null {
-  const game = games.get(gameId);
+export async function deleteGame(gameId: string): Promise<boolean> {
+  const result = await sql`DELETE FROM games WHERE game_id = ${gameId} RETURNING game_id`;
+  return result.length > 0;
+}
+
+export async function listWebhooks(gameId: string): Promise<Webhook[] | null> {
+  const game = await fetchGame(gameId);
   if (!game) return null;
-  return Array.from(game.webhooks.values());
+
+  const rows = await sql`
+    SELECT webhook_id, url, color FROM webhooks WHERE game_id = ${gameId}
+  `;
+  return parseWebhookRows(rows);
 }
 
-export function addWebhook(gameId: string, url: string, color: Color): Webhook {
-  const game = games.get(gameId);
+export async function addWebhook(gameId: string, url: string, color: Color): Promise<Webhook> {
+  const game = await fetchGame(gameId);
   if (!game) throw new Error("Game not found");
 
-  const webhook: Webhook = { webhookId: crypto.randomUUID().slice(0, 8), url, color };
-  game.webhooks.set(webhook.webhookId, webhook);
-  return webhook;
+  const webhookId = crypto.randomUUID().slice(0, 8);
+  await sql`
+    INSERT INTO webhooks (webhook_id, game_id, url, color)
+    VALUES (${webhookId}, ${gameId}, ${url}, ${color})
+  `;
+  return { webhookId, url, color };
 }
 
-export function deleteGame(gameId: string): boolean {
-  return games.delete(gameId);
+export async function removeWebhook(gameId: string, webhookId: string): Promise<boolean> {
+  const result = await sql`
+    DELETE FROM webhooks WHERE game_id = ${gameId} AND webhook_id = ${webhookId} RETURNING webhook_id
+  `;
+  return result.length > 0;
 }
 
-export function removeWebhook(gameId: string, webhookId: string): boolean {
-  const game = games.get(gameId);
-  if (!game) return false;
-  return game.webhooks.delete(webhookId);
+export async function getWebhooks(gameId: string): Promise<Webhook[]> {
+  const rows = await sql`
+    SELECT webhook_id, url, color FROM webhooks WHERE game_id = ${gameId}
+  `;
+  return parseWebhookRows(rows);
 }
