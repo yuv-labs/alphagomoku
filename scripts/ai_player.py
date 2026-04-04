@@ -62,17 +62,27 @@ def main():
     parser.add_argument("--num-searches", type=int, default=400, help="MCTS searches per move")
     parser.add_argument("--poll-interval", type=float, default=2.0, help="Polling interval in seconds")
     parser.add_argument("--iteration", type=int, default=None, help="Model checkpoint iteration (default: latest)")
+    parser.add_argument("--model", default="alpha", choices=["alpha", "nagi"], help="Model type: alpha (ours) or nagi (pretrained)")
     args = parser.parse_args()
 
     game_logic = Gomoku(args.rows, args.cols, args.in_a_row)
-    print(f"Loading model for {game_logic}...")
-    game_engine = Game(game=game_logic, play_args={
-        'C': 2,
-        'num_searches': args.num_searches,
-        'dirichlet_epsilon': 0.0,
-        'dirichlet_alpha': 0.03,
-    }, iteration=args.iteration)
-    print("Model loaded!")
+
+    if args.model == "nagi":
+        from modules.nagi_net import NagiGame
+        print(f"Loading Nagi pretrained model...")
+        nagi = NagiGame(board_size=args.rows)
+        game_engine = None
+        print("Nagi model loaded!")
+    else:
+        print(f"Loading model for {game_logic}...")
+        game_engine = Game(game=game_logic, play_args={
+            'C': 2,
+            'num_searches': args.num_searches,
+            'dirichlet_epsilon': 0.0,
+            'dirichlet_alpha': 0.03,
+        }, iteration=args.iteration)
+        nagi = None
+        print("Model loaded!")
     print(f"Game: {args.api_base}/api/games/{args.game_id}")
     print(f"Color: {'Black' if args.color == 'b' else 'White'}")
     print(f"Polling every {args.poll_interval}s\n")
@@ -101,11 +111,19 @@ def main():
                 time.sleep(args.poll_interval)
                 continue
 
-            if args.iteration is None:
-                game_engine.reload_if_new_checkpoint()
-
             state = web_board_to_numpy(data["board"], args.color)
-            _, action = game_engine.get_next_move(state, player=1)
+
+            if args.model == "nagi":
+                policy, value = nagi.predict(state)
+                valid = (state.reshape(-1) == 0).astype(np.uint8)
+                policy *= valid
+                policy /= policy.sum()
+                action = int(np.argmax(policy))
+            else:
+                if args.iteration is None:
+                    game_engine.reload_if_new_checkpoint()
+                _, action = game_engine.get_next_move(state, player=1)
+
             row, col = int(action // args.cols), int(action % args.cols)
 
             print(f"AI plays: ({row}, {col})")
