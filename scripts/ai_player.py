@@ -101,7 +101,8 @@ def main():
                 time.sleep(args.poll_interval)
                 continue
 
-            game_engine.reload_if_new_checkpoint()
+            if args.iteration is None:
+                game_engine.reload_if_new_checkpoint()
 
             state = web_board_to_numpy(data["board"], args.color)
             _, action = game_engine.get_next_move(state, player=1)
