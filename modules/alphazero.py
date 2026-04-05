@@ -3,7 +3,10 @@ import os
 import torch
 import torch.nn.functional as F
 import random
-from tqdm.notebook import trange
+try:
+    from tqdm.notebook import trange
+except ImportError:
+    from tqdm import trange
 
 from modules.mcts import MCTS, MCTSParallel
 
