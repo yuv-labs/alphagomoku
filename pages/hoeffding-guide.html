@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hoeffding 부등식 — 유도 과정 완전 가이드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+<script>
+MathJax = {
+  tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<style>
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --bg-card: #12121a;
+  --bg-card-hover: #1a1a28;
+  --border: #1e1e30;
+  --border-active: #3a3a5c;
+  --text: #c8c8d8;
+  --text-dim: #6a6a80;
+  --text-bright: #eeeef4;
+  --accent: #6c5ce7;
+  --accent-glow: #6c5ce740;
+  --green: #00b894;
+  --green-dim: #00b89430;
+  --red: #e17055;
+  --red-dim: #e1705530;
+  --yellow: #fdcb6e;
+  --yellow-dim: #fdcb6e30;
+  --blue: #74b9ff;
+  --blue-dim: #74b9ff30;
+  --cyan: #81ecec;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'IBM Plex Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.8;
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+/* === NAVIGATION === */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: #0a0a0fdd;
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+}
+
+nav .nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  gap: 2rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+nav .nav-inner::-webkit-scrollbar { display: none; }
+
+nav a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+nav a:hover, nav a.active { color: var(--accent); }
+
+nav .nav-logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 0.9rem;
+}
+
+/* === LAYOUT === */
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 80px 2rem 6rem;
+}
+
+section {
+  margin-bottom: 5rem;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* === TYPOGRAPHY === */
+h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 900;
+  color: var(--text-bright);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.2rem;
+}
+
+h1 .accent { color: var(--accent); }
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  margin-bottom: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+h2 .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-glow);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin: 2rem 0 0.8rem;
+}
+
+p {
+  margin-bottom: 1rem;
+  color: var(--text);
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  margin-bottom: 3rem;
+  line-height: 1.7;
+}
+
+/* === CARDS === */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 1.5rem 0;
+  transition: border-color 0.3s;
+}
+
+.card:hover {
+  border-color: var(--border-active);
+}
+
+.card-accent {
+  border-left: 3px solid var(--accent);
+}
+
+.card-green {
+  border-left: 3px solid var(--green);
+}
+
+.card-yellow {
+  border-left: 3px solid var(--yellow);
+}
+
+.card-blue {
+  border-left: 3px solid var(--blue);
+}
+
+.card-red {
+  border-left: 3px solid var(--red);
+}
+
+.card-title {
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 0.8rem;
+  font-size: 0.95rem;
+}
+
+/* === MATH === */
+.math-block {
+  background: #0e0e18;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.8rem 2rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.math-block.highlight {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, #0e0e18, #14122a);
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+
+.math-block.result {
+  border-color: var(--green);
+  background: linear-gradient(135deg, #0e0e18, #0e1a18);
+  box-shadow: 0 0 30px var(--green-dim);
+}
+
+/* === STEP INDICATOR === */
+.step-flow {
+  display: flex;
+  gap: 0.5rem;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.step-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.35rem 0.8rem;
+  border-radius: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.step-pill:hover, .step-pill.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* === TABLE === */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.comparison-table th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.comparison-table td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.comparison-table tr:hover td {
+  background: var(--bg-card);
+}
+
+/* === TAG === */
+.tag {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  margin-right: 0.3rem;
+}
+
+.tag-yes { background: var(--green-dim); color: var(--green); }
+.tag-no { background: var(--red-dim); color: var(--red); }
+.tag-partial { background: var(--yellow-dim); color: var(--yellow); }
+
+/* === ARROW LIST === */
+.arrow-list {
+  list-style: none;
+  padding: 0;
+}
+
+.arrow-list li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.arrow-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* === DIAGRAM === */
+.flow-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin: 2rem 0;
+}
+
+.flow-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-bright);
+  text-align: center;
+  min-width: 100px;
+}
+
+.flow-box.active-box {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.flow-arrow {
+  color: var(--text-dim);
+  font-size: 1.2rem;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 640px) {
+  main { padding: 70px 1rem 4rem; }
+  .card { padding: 1.2rem; }
+  .math-block { padding: 1.2rem 1rem; }
+  .flow-diagram { flex-direction: column; }
+  .flow-arrow { transform: rotate(90deg); }
+}
+
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <span class="nav-logo">Hoeffding</span>
+    <a href="#overview">개요</a>
+    <a href="#prereq">사전 지식</a>
+    <a href="#step1">Step 1</a>
+    <a href="#step2">Step 2</a>
+    <a href="#step3">Step 3</a>
+    <a href="#step4">Step 4</a>
+    <a href="#connection">정규분포 관계</a>
+    <a href="#summary">요약</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ====== HERO ====== -->
+<section id="overview">
+  <h1>Hoeffding<br><span class="accent">부등식 유도</span></h1>
+  <p class="subtitle">
+    "bounded 확률변수의 평균은 기댓값에서 얼마나 벗어날 수 있는가?"<br>
+    이 질문에 대한 답을 4단계로 유도합니다.
+  </p>
+
+  <div class="card card-accent">
+    <div class="card-title">Hoeffding 부등식 (최종 결과)</div>
+    <div class="math-block result">
+      $$P\!\left(\bar{X} - \mu \geq \epsilon\right) \;\leq\; \exp\!\left(-\frac{2\,n^2\,\epsilon^2}{\displaystyle\sum_{i=1}^{n}(b_i - a_i)^2}\right)$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem; margin-bottom:0;">
+      $X_1, \dots, X_n$이 독립이고 $a_i \leq X_i \leq b_i$일 때 성립합니다.
+    </p>
+  </div>
+
+  <div class="step-flow">
+    <a class="step-pill" href="#step1">STEP 1 · Markov 변환</a>
+    <a class="step-pill" href="#step2">STEP 2 · MGF 분리</a>
+    <a class="step-pill" href="#step3">STEP 3 · Hoeffding 보조정리</a>
+    <a class="step-pill" href="#step4">STEP 4 · 최적화</a>
+  </div>
+</section>
+
+<!-- ====== PREREQUISITES ====== -->
+<section id="prereq">
+  <h2><span class="num">00</span> 사전 지식</h2>
+
+  <div class="card">
+    <div class="card-title">Markov 부등식</div>
+    <p>음이 아닌 확률변수 $Y \geq 0$에 대해:</p>
+    <div class="math-block">
+      $$P(Y \geq a) \;\leq\; \frac{E[Y]}{a} \quad (a > 0)$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem;">
+      증명: $E[Y] = \int_0^\infty y\,f(y)\,dy \geq \int_a^\infty y\,f(y)\,dy \geq a\!\int_a^\infty f(y)\,dy = a\,P(Y \geq a)$
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">적률생성함수 (MGF)</div>
+    <p>확률변수 $X$의 MGF는 다음과 같이 정의됩니다:</p>
+    <div class="math-block">
+      $$M_X(t) = E[e^{tX}]$$
+    </div>
+    <p>독립인 확률변수 $X, Y$에 대해: $M_{X+Y}(t) = M_X(t) \cdot M_Y(t)$</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">볼록성 (Convexity)</div>
+    <p>$e^{sx}$는 $x$에 대해 볼록(convex) 함수입니다. 따라서 $a \leq x \leq b$일 때:</p>
+    <div class="math-block">
+      $$e^{sx} \;\leq\; \frac{b - x}{b - a}\,e^{sa} \;+\; \frac{x - a}{b - a}\,e^{sb}$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem;">
+      두 끝점 $(a, e^{sa})$와 $(b, e^{sb})$를 잇는 직선은 항상 곡선 위에 있습니다.
+    </p>
+  </div>
+</section>
+
+<!-- ====== STEP 1 ====== -->
+<section id="step1">
+  <h2><span class="num">01</span> Markov + 지수 변환</h2>
+
+  <p>확률 $P(\bar{X} - \mu \geq \epsilon)$을 직접 바운드하기 어렵습니다. 핵심 아이디어: <strong>단조증가 함수 $e^{t \cdot (\cdot)}$를 씌운 뒤 Markov 부등식을 적용</strong>합니다.</p>
+
+  <h3>변환 과정</h3>
+
+  <div class="card card-accent">
+    <p>임의의 $t > 0$에 대해, $e^{tx}$는 단조증가이므로:</p>
+    <div class="math-block">
+      $$\bar{X} - \mu \geq \epsilon \;\;\Longleftrightarrow\;\; e^{t(\bar{X}-\mu)} \geq e^{t\epsilon}$$
+    </div>
+
+    <p>따라서 확률이 보존됩니다:</p>
+    <div class="math-block">
+      $$P(\bar{X} - \mu \geq \epsilon) = P\!\left(e^{t(\bar{X}-\mu)} \geq e^{t\epsilon}\right)$$
+    </div>
+
+    <p>이제 $e^{t(\bar{X}-\mu)}$는 <strong>음이 아닌 확률변수</strong>이므로 Markov 부등식 적용:</p>
+    <div class="math-block highlight">
+      $$P(\bar{X} - \mu \geq \epsilon) \;\leq\; \frac{E\!\left[e^{t(\bar{X}-\mu)}\right]}{e^{t\epsilon}} \;=\; e^{-t\epsilon}\,E\!\left[e^{t(\bar{X}-\mu)}\right]$$
+    </div>
+  </div>
+
+  <div class="card card-green">
+    <div class="card-title">왜 지수 변환인가?</div>
+    <ul class="arrow-list">
+      <li>Markov 부등식을 쓰려면 <strong>음이 아닌 확률변수</strong>가 필요 — $e^{tx}$는 항상 양수</li>
+      <li>$t$라는 <strong>자유 매개변수</strong>가 생겨서 나중에 최적화 가능</li>
+      <li>독립인 합의 MGF가 <strong>곱으로 분리</strong>됨 (Step 2)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ====== STEP 2 ====== -->
+<section id="step2">
+  <h2><span class="num">02</span> 독립성으로 MGF 분리</h2>
+
+  <p>$\bar{X} - \mu = \frac{1}{n}\sum_{i=1}^n (X_i - \mu_i)$이므로:</p>
+
+  <div class="math-block">
+    $$E\!\left[e^{t(\bar{X}-\mu)}\right] = E\!\left[\exp\!\left(\sum_{i=1}^n \frac{t}{n}(X_i - \mu_i)\right)\right]$$
+  </div>
+
+  <div class="card card-blue">
+    <div class="card-title">독립성의 힘</div>
+    <p>$X_1, \dots, X_n$이 <strong>독립</strong>이므로, 지수 안의 합을 곱으로 분리할 수 있습니다:</p>
+    <div class="math-block highlight">
+      $$E\!\left[e^{t(\bar{X}-\mu)}\right] = \prod_{i=1}^{n} E\!\left[e^{\frac{t}{n}(X_i - \mu_i)}\right]$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem;">
+      일반적으로 $E[f(X) \cdot g(Y)] = E[f(X)] \cdot E[g(Y)]$ (독립일 때)
+    </p>
+  </div>
+
+  <p>이제 문제가 <strong>각 $E[e^{s \cdot Z_i}]$를 바운드</strong>하는 것으로 환원되었습니다.<br>
+  여기서 $Z_i = X_i - \mu_i$ (평균 0, $[a_i - \mu_i,\; b_i - \mu_i]$에 bounded).</p>
+</section>
+
+<!-- ====== STEP 3 ====== -->
+<section id="step3">
+  <h2><span class="num">03</span> Hoeffding 보조정리 (핵심!)</h2>
+
+  <div class="card card-red">
+    <div class="card-title">Hoeffding's Lemma</div>
+    <p>$E[Z] = 0$이고 $a \leq Z \leq b$이면:</p>
+    <div class="math-block highlight">
+      $$E[e^{sZ}] \;\leq\; \exp\!\left(\frac{s^2(b-a)^2}{8}\right)$$
+    </div>
+  </div>
+
+  <h3>증명</h3>
+
+  <div class="card">
+    <div class="card-title">Step 3-1: 볼록성으로 상계</div>
+    <p>$e^{sx}$는 볼록이므로 $a \leq Z \leq b$에서:</p>
+    <div class="math-block">
+      $$e^{sZ} \;\leq\; \frac{b - Z}{b - a}\,e^{sa} + \frac{Z - a}{b - a}\,e^{sb}$$
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Step 3-2: 기댓값 취하기</div>
+    <p>양변에 기댓값을 취하고, $E[Z] = 0$을 대입하면:</p>
+    <div class="math-block">
+      $$E[e^{sZ}] \;\leq\; \frac{b}{b-a}\,e^{sa} + \frac{-a}{b-a}\,e^{sb}$$
+    </div>
+    <p>$p = \dfrac{-a}{b-a}$로 놓으면 ($1-p = \dfrac{b}{b-a}$):</p>
+    <div class="math-block">
+      $$E[e^{sZ}] \;\leq\; (1-p)\,e^{sa} + p\,e^{sb}$$
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Step 3-3: 로그 변환</div>
+    <p>$u = s(b-a)$로 치환하고 로그를 취하면 함수 $L(u)$를 정의합니다:</p>
+    <div class="math-block">
+      $$L(u) = -pu + \ln(1 - p + p\,e^u)$$
+    </div>
+    <p>즉 $\,E[e^{sZ}] \leq e^{L(u)}$를 보이는 것이 목표입니다.</p>
+  </div>
+
+  <div class="card card-yellow">
+    <div class="card-title">Step 3-4: Taylor 전개로 바운드</div>
+    <p>$L(u)$를 분석합니다:</p>
+    <ul class="arrow-list">
+      <li>$L(0) = 0$</li>
+      <li>$L'(0) = 0$</li>
+      <li>$L''(u) = \dfrac{p(1-p)\,e^u}{(1 - p + p\,e^u)^2} \;\leq\; \dfrac{1}{4}$ &nbsp; (모든 $u$에서)</li>
+    </ul>
+    <p style="margin-top:1rem;">Taylor 정리(라그랑주 나머지)에 의해:</p>
+    <div class="math-block highlight">
+      $$L(u) \;\leq\; \frac{u^2}{8}$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem;">
+      $L(0) = 0$, $L'(0) = 0$이고 $L''(u) \leq \frac{1}{4}$이므로
+      $L(u) \leq \frac{1}{2} \cdot \frac{1}{4} \cdot u^2 = \frac{u^2}{8}$
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Step 3-5: 되돌리기</div>
+    <p>$u = s(b-a)$를 대입하면:</p>
+    <div class="math-block">
+      $$E[e^{sZ}] \;\leq\; e^{L(u)} \;\leq\; e^{u^2/8} = \exp\!\left(\frac{s^2(b-a)^2}{8}\right) \quad \blacksquare$$
+    </div>
+  </div>
+</section>
+
+<!-- ====== STEP 4 ====== -->
+<section id="step4">
+  <h2><span class="num">04</span> 조합 + t 최적화</h2>
+
+  <p>Step 1~3의 결과를 조합합니다.</p>
+
+  <div class="flow-diagram">
+    <div class="flow-box">Markov<br><small>Step 1</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">MGF 분리<br><small>Step 2</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">보조정리<br><small>Step 3</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box active-box">최적화<br><small>Step 4</small></div>
+  </div>
+
+  <h3>결합</h3>
+  <div class="math-block">
+    $$P(\bar{X} - \mu \geq \epsilon) \;\leq\; e^{-t\epsilon} \cdot \prod_{i=1}^{n} \exp\!\left(\frac{t^2(b_i-a_i)^2}{8n^2}\right)$$
+  </div>
+
+  <p>지수를 정리하면:</p>
+  <div class="math-block">
+    $$P(\bar{X} - \mu \geq \epsilon) \;\leq\; \exp\!\left(-t\epsilon + \frac{t^2}{8n^2}\sum_{i=1}^n(b_i-a_i)^2\right)$$
+  </div>
+
+  <h3>$t$에 대해 최적화</h3>
+  <div class="card card-accent">
+    <p>지수 부분을 $g(t) = -t\epsilon + \frac{t^2 \cdot c}{8n^2}$로 놓으면 ($c = \sum(b_i-a_i)^2$):</p>
+    <div class="math-block">
+      $$g'(t) = -\epsilon + \frac{2t \cdot c}{8n^2} = 0 \quad\Longrightarrow\quad t^* = \frac{4n^2\epsilon}{c}$$
+    </div>
+    <p>$t^*$를 대입하면:</p>
+    <div class="math-block">
+      $$g(t^*) = -\frac{4n^2\epsilon^2}{c} + \frac{16n^4\epsilon^2}{c^2} \cdot \frac{c}{8n^2} = -\frac{4n^2\epsilon^2}{c} + \frac{2n^2\epsilon^2}{c} = -\frac{2n^2\epsilon^2}{c}$$
+    </div>
+  </div>
+
+  <h3>최종 결과</h3>
+  <div class="math-block result">
+    $$\boxed{\;P\!\left(\bar{X} - \mu \geq \epsilon\right) \;\leq\; \exp\!\left(-\frac{2\,n^2\,\epsilon^2}{\displaystyle\sum_{i=1}^{n}(b_i - a_i)^2}\right)\;}$$
+  </div>
+</section>
+
+<!-- ====== CONNECTION TO NORMAL ====== -->
+<section id="connection">
+  <h2><span class="num">05</span> 정규분포와의 관계</h2>
+
+  <div class="card card-yellow">
+    <div class="card-title">핵심 연결 고리: Sub-Gaussian</div>
+    <p>Hoeffding 보조정리의 결과를 다시 보면:</p>
+    <div class="math-block">
+      $$E[e^{sZ}] \;\leq\; \exp\!\left(\frac{s^2(b-a)^2}{8}\right)$$
+    </div>
+    <p>가우시안 $Z \sim \mathcal{N}(0, \sigma^2)$의 MGF는:</p>
+    <div class="math-block">
+      $$E[e^{sZ}] = \exp\!\left(\frac{s^2\sigma^2}{2}\right)$$
+    </div>
+    <p style="margin-top:1rem;">
+      두 식을 비교하면 $\dfrac{\sigma^2}{2} = \dfrac{(b-a)^2}{8}$, 즉 $\sigma^2 = \dfrac{(b-a)^2}{4}$인 가우시안과 같은 형태입니다.
+    </p>
+    <p><strong>Bounded 확률변수의 MGF가 가우시안의 MGF보다 작다</strong> — 이것이 "sub-Gaussian"의 의미입니다.</p>
+  </div>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>질문</th>
+        <th>답</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>정규분포 PDF에서 직접 유도?</td>
+        <td><span class="tag tag-no">NO</span> Markov + 볼록성 + MGF 사용</td>
+      </tr>
+      <tr>
+        <td>정규분포와 간접 연결?</td>
+        <td><span class="tag tag-yes">YES</span> 보조정리에서 가우시안 MGF로 바운드</td>
+      </tr>
+      <tr>
+        <td>결과의 형태</td>
+        <td><span class="tag tag-partial">SIMILAR</span> $e^{-c\epsilon^2}$ — 가우시안 꼬리와 동일 형태</td>
+      </tr>
+      <tr>
+        <td>직관적 의미</td>
+        <td>"bounded 변수는 가우시안보다 꼬리가 가볍다" (sub-Gaussian)</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====== SUMMARY ====== -->
+<section id="summary">
+  <h2><span class="num">06</span> 전체 요약</h2>
+
+  <div class="flow-diagram">
+    <div class="flow-box">$P(\bar{X}-\mu \geq \epsilon)$<br><small>구하고 싶은 것</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">$e^{t(\cdot)}$ 씌움<br><small>지수 변환</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Markov 적용<br><small>MGF로 바운드</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">독립성<br><small>곱으로 분리</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">보조정리<br><small>각 항 바운드</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box active-box">$t$ 최적화<br><small>최종 결과</small></div>
+  </div>
+
+  <div class="card card-green">
+    <div class="card-title">한 줄 요약</div>
+    <p style="font-size:1.05rem; color:var(--text-bright); margin-bottom:0;">
+      Hoeffding 부등식은 <strong>Markov 부등식 + 지수 트릭 + bounded 변수의 sub-Gaussian 성질</strong>을 결합한 결과입니다. 정규분포에서 직접 유도되진 않지만, 가우시안을 "최악의 경우 상계"로 사용합니다.
+    </p>
+  </div>
+
+  <div class="card" style="margin-top:2rem;">
+    <div class="card-title">MCTS에서의 활용 (UCB)</div>
+    <p>MCTS의 UCB1 공식에서 탐색 항 $\sqrt{\dfrac{2\ln N}{n_i}}$는 Hoeffding 부등식에서 직접 도출됩니다.</p>
+    <p>보상이 $[0,1]$에 bounded → $\sum(b_i-a_i)^2 = n$ → 부등식에 대입하면:</p>
+    <div class="math-block">
+      $$P(\bar{X}_i - \mu_i \geq \epsilon) \leq e^{-2n_i\epsilon^2}$$
+    </div>
+    <p style="color:var(--text-dim); font-size:0.88rem;">
+      이 확률을 $\frac{1}{N^4}$로 설정하면 $\epsilon = \sqrt{\frac{2\ln N}{n_i}}$ — 바로 UCB1의 탐색 항입니다.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<script>
+// Intersection Observer for scroll animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('section').forEach(section => {
+  observer.observe(section);
+});
+
+// Active nav link tracking
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav a');
+
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(section => {
+    const top = section.offsetTop - 100;
+    if (window.scrollY >= top) {
+      current = section.getAttribute('id');
+    }
+  });
+  navLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) {
+      link.classList.add('active');
+    }
+  });
+});
+</script>
+
+</body>
+</html>
